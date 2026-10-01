@@ -64,40 +64,40 @@ export default function MiPerfil() {
 
 
 
-  const manejarSubmit = (e) => {
-    e.preventDefault();
-    setMensaje("");
+  const manejarSubmit = async (e) => {
+  e.preventDefault();
+  setMensaje("");
 
-    const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!correoValido.test(form.correo)) {
-      setMensaje("❌ Por favor ingresa un correo válido");
+  if (!correoValido.test(form.correo)) {
+    setMensaje("❌ Por favor ingresa un correo válido");
+    return;
+  }
+
+  if (esLogin) {
+    const res = await login({
+      correo: form.correo,
+      password: form.password
+    });
+
+    if (!res.ok) {
+      setMensaje(`❌ ${res.msg}`);
       return;
     }
 
-    if (esLogin) {
-      const res = login({
-        correo: form.correo,
-        password: form.password
-      });
+    setMensaje("✅ Sesión iniciada");
+  } else {
+    const res = await register(form);
 
-      if (!res.ok) {
-        setMensaje(res.msg);
-        return;
-      }
-
-      setMensaje("✅ Sesión iniciada");
-    } else {
-      const res = register(form);
-
-      if (!res.ok) {
-        setMensaje(res.msg);
-        return;
-      }
-
-      setMensaje("✅ Cuenta creada");
+    if (!res.ok) {
+      setMensaje(`❌ ${res.msg}`);
+      return;
     }
-  };
+
+    setMensaje("✅ Cuenta creada");
+  }
+};
 
 
   const handleUpdate = () => {
