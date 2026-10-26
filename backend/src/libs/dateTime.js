@@ -53,3 +53,19 @@ export const nowTimeInTz = () =>
     minute: '2-digit',
     hourCycle: 'h23',
   }).format(new Date());
+
+/** Suma (o resta) días a un "YYYY-MM-DD" y devuelve otro "YYYY-MM-DD". */
+export const addDays = (fecha, days) => {
+  const [year, month, day] = fecha.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+};
+
+/** Semana (lunes a domingo) que contiene la fecha dada. */
+export const weekRange = (fecha) => {
+  const desdeLunes = (dayOfWeek(fecha) + 6) % 7; // lunes=0 ... domingo=6
+  const desde = addDays(fecha, -desdeLunes);
+  return { desde, hasta: addDays(desde, 6) };
+};
+
+/** Duración en horas entre dos "HH:mm" (ej. "18:00" y "20:00" -> 2). */
+export const hoursBetween = (inicio, fin) => (toMinutes(fin) - toMinutes(inicio)) / 60;

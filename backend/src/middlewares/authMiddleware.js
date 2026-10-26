@@ -54,3 +54,17 @@ export const authRequired = async (req, res, next) => {
     return next(error);
   }
 };
+
+/**
+ * Autorización por rol. Debe ir DESPUÉS de authRequired. El rol se lee de la
+ * base de datos en cada petición, así que quitarle el rol a un usuario surte
+ * efecto de inmediato aunque su token siga vigente.
+ */
+export const adminOnly = (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res
+      .status(403)
+      .json({ message: 'Acceso denegado: se requieren permisos de administrador' });
+  }
+  return next();
+};

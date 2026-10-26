@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 import Reservation from '../models/Reservation.js';
+import { getCancha } from '../data/canchas.js';
+import { parsePositiveInt } from '../libs/validators.js';
+import { toReservationDto } from '../libs/serializers.js';
 import {
   END_TIME_RE,
   TIME_RE,
@@ -20,16 +23,6 @@ const MAX_HORAS = 6;
 
 // ---- Helpers --------------------------------------------------------------
 
-// Acepta 3 o "3", pero no true, "", [], {}, "3abc"...
-const parsePositiveInt = (value) => {
-  if (typeof value === 'number' && Number.isInteger(value) && value >= 1) return value;
-  if (typeof value === 'string' && /^\d+$/.test(value)) {
-    const number = Number(value);
-    return number >= 1 ? number : null;
-  }
-  return null;
-};
-
 const isAdmin = (user) => user.role === 'admin';
 
 // ---- Controladores --------------------------------------------------------
@@ -42,6 +35,9 @@ export const createReservation = async (req, res, next) => {
     const canchaId = parsePositiveInt(rawCanchaId);
     if (!canchaId) {
       return res.status(400).json({ message: 'canchaId debe ser un número entero positivo' });
+    }
+    if (!getCancha(canchaId)) {
+      return res.status(400).json({ message: 'La cancha seleccionada no existe' });
     }
     if (!isRealDate(fecha)) {
       return res.status(400).json({ message: 'La fecha debe ser real y tener formato YYYY-MM-DD' });
@@ -106,7 +102,7 @@ export const createReservation = async (req, res, next) => {
 
     return res.status(201).json({
       message: 'Reserva creada correctamente',
-      reservation,
+      reservation: toReservationDto(reservation),
     });
   } catch (error) {
     return next(error);
@@ -141,7 +137,7 @@ export const listReservations = async (req, res, next) => {
       .sort({ fecha: 1, horaInicio: 1 })
       .lean();
 
-    return res.json({ count: reservations.length, reservations });
+    return res.json({ count: reservations.length, reservations: reservations.map(toReservationDto) });
   } catch (error) {
     return next(error);
   }

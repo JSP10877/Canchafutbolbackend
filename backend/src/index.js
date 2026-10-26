@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { connectDB, disconnectDB } from './db.js';
 import authRoutes from './routes/authRoutes.js';
 import reservationRoutes from './routes/reservationRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
 
 const app = express();
@@ -28,6 +29,7 @@ app.use(cookieParser());
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/reservations', reservationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ---- 404 y errores (siempre al final) ---------------------------------------
 app.use(notFound);

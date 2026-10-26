@@ -63,4 +63,8 @@ reservationSchema.index(
   { unique: true, partialFilterExpression: { estado: 'activa' } },
 );
 
+// Acelera el listado del panel de administración (orden por fecha) y los
+// filtros por rango de fechas de las estadísticas.
+reservationSchema.index({ fecha: -1, horaInicio: -1 });
+
 export default mongoose.model('Reservation', reservationSchema);

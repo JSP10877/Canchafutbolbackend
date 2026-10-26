@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // REGISTRO
-  const register = async ({ nombre, correo, password }) => {
+  const register = async ({ nombre, correo, telefono, password }) => {
     try {
       const res = await fetch("http://localhost:4000/api/auth/register", {
         method: "POST",
@@ -42,6 +42,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({
           nombre,
           correo: correo.trim().toLowerCase(),
+          telefono: telefono?.trim() || "",
           password: password.trim()
         })
       });

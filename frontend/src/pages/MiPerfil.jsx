@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
+import { useMyReservations } from "../hooks/useMyReservations";
+import { cancelReservation } from "../services/reservationService";
+import { todayLocal } from "../utils/dates";
+import { toPerfilReserva } from "../utils/reservations";
 import fondo from "../assets/images/futbol.jpg";
 
 export default function MiPerfil() {
@@ -23,12 +27,12 @@ export default function MiPerfil() {
     password: ""
   });
 
-  const [reservas, setReservas] = useState([]);
-
-  useEffect(() => {
-    const guardadas = JSON.parse(localStorage.getItem("reservas")) || [];
-    setReservas(guardadas);
-  }, []);
+  // Las reservas ahora viven en la base de datos (ya no en localStorage)
+  const misReservas = useMyReservations(Boolean(user));
+  const reservas = useMemo(
+    () => (misReservas.data?.reservations ?? []).map(toPerfilReserva),
+    [misReservas.data],
+  );
 
   useEffect(() => {
     if (user) {
@@ -45,11 +49,10 @@ export default function MiPerfil() {
     }
   }, [user]);
 
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = todayLocal();
 
-  const reservasUsuario = reservas
-    .map((r, index) => ({ ...r, index }))
-    .filter((r) => r.usuario === user?.nombre);
+  // La API ya devuelve solo las reservas del usuario con sesión iniciada
+  const reservasUsuario = reservas.map((r, index) => ({ ...r, index }));
 
   const activas = reservasUsuario.filter(r => r.fecha >= hoy);
   const historial = reservasUsuario.filter(r => r.fecha < hoy);
@@ -106,13 +109,15 @@ export default function MiPerfil() {
     setEditando(false);
   };
 
-  const cancelarReserva = (indexReserva) => {
-    const nuevasReservas = reservas.filter((_, i) => i !== indexReserva);
-
-    localStorage.setItem("reservas", JSON.stringify(nuevasReservas));
-    setReservas(nuevasReservas);
-    setReservaAbierta(null);
-    setMensaje("✅ Reserva cancelada correctamente");
+  const cancelarReserva = async (idReserva) => {
+    try {
+      await cancelReservation(idReserva);
+      setReservaAbierta(null);
+      setMensaje("✅ Reserva cancelada correctamente");
+      misReservas.refetch();
+    } catch (error) {
+      setMensaje(`❌ ${error.message}`);
+    }
   };
 
   const obtenerPrecio = (cancha) => {
@@ -307,14 +312,25 @@ export default function MiPerfil() {
                       Reservas activas
                     </h3>
 
-                    {activas.length === 0 ? (
+                    {misReservas.error && (
+                      <div role="alert" className="mb-3 rounded-xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-200">
+                        No se pudieron cargar tus reservas: {misReservas.error.message}{" "}
+                        <button onClick={misReservas.refetch} className="underline font-semibold">
+                          Reintentar
+                        </button>
+                      </div>
+                    )}
+
+                    {misReservas.loading && !misReservas.data ? (
+                      <p className="text-slate-400">Cargando tus reservas...</p>
+                    ) : activas.length === 0 ? (
                       <p className="text-slate-400">
                         No tienes reservas activas
                       </p>
                     ) : (
                       activas.map((r, i) => {
                         const abierta = reservaAbierta === i;
-                        const precioHora = obtenerPrecio(r.cancha);
+                        const precioHora = r.precioHora ?? obtenerPrecio(r.cancha);
                         const duracion = r.duracion || 2;
                         const total = precioHora * duracion;
 
@@ -347,7 +363,7 @@ export default function MiPerfil() {
                                 </p>
 
                                 <button
-                                  onClick={() => cancelarReserva(r.index)}
+                                  onClick={() => cancelarReserva(r.idReserva)}
                                   className="mt-4 w-full bg-red-500 hover:bg-red-600 py-3 rounded-xl"
                                 >
                                   Cancelar reserva

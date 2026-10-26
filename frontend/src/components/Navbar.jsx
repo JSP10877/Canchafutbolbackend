@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
-import { Goal, Home, LayoutGrid, User } from "lucide-react";
+import { Goal, Home, LayoutGrid, ShieldCheck, User } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 const Navbar = ({ paginaActiva }) => {
+  const { user } = useAuth();
+
   const navItem = (ruta, texto, icono, activa) => (
     <Link
       to={ruta}
@@ -62,6 +65,15 @@ const Navbar = ({ paginaActiva }) => {
             <User size={18} />,
             paginaActiva === "miperfil"
           )}
+
+          {/* Solo visible para administradores */}
+          {user?.role === "admin" &&
+            navItem(
+              "/admin",
+              "Administración",
+              <ShieldCheck size={18} />,
+              paginaActiva === "admin"
+            )}
         </div>
 
         {/* CTA */}

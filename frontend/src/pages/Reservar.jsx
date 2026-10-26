@@ -3,6 +3,10 @@ import { useState } from "react";
 import Navbar from "../components/Navbar";
 import { reservasMock } from "../data/reservasMock";
 import { useAuth } from "../context/AuthContext";
+import { useAvailability } from "../hooks/useAvailability";
+import { createReservation } from "../services/reservationService";
+import { dayOfWeek, hourLabel, hourOf, todayLocal } from "../utils/dates";
+import { toOcupado } from "../utils/reservations";
 
 import canchasfutbol from "../assets/images/futbol.jpg";
 import canchaspadel from "../assets/images/padel.jpg";
@@ -41,25 +45,39 @@ export default function Reservar() {
   const [toast, setToast] = useState({
     show: false,
     text: "",
+    type: "success",
+    title: "",
   });
   const [mensajeHorario, setMensajeHorario] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  // Horas ya ocupadas en la base de datos para esta cancha y fecha
+  const disponibilidad = useAvailability(Number(id), fecha);
 
   if (!cancha) return <p className="text-white p-6">Cancha no encontrada</p>;
 
-  const hoy = new Date();
-  const fechaHoy = hoy.toISOString().split("T")[0];
-  const horaActual = hoy.getHours();
+  const fechaHoy = todayLocal();
+  const horaActual = new Date().getHours();
 
   const bloqueado = data.noDisponibles.includes(fecha);
   const totalReserva = cancha.precio * duracionReserva;
 
-  const reservasGuardadas =
-    JSON.parse(localStorage.getItem("reservas")) || [];
+  // Mismo formato que antes, pero ahora vienen de la API (de todos los usuarios).
+  // Mientras llega la respuesta no se muestra nada de otra fecha.
+  const cargandoDisponibilidad = disponibilidad.loading;
+  const reservasGuardadas = cargandoDisponibilidad
+    ? []
+    : (disponibilidad.data?.ocupados ?? []).map((rango) => toOcupado(id, fecha, rango));
+
+  const avisar = (type, title, text, ms = 2500) => {
+    setToast({ show: true, type, title, text });
+    setTimeout(() => setToast({ show: false, text: "" }), ms);
+  };
 
   const generarHorarios = () => {
     if (!fecha) return [];
 
-    const dia = new Date(fecha).getDay();
+    const dia = dayOfWeek(fecha);
     const inicio = dia === 0 || dia === 6 ? 7 : 8;
     const cierre = dia === 0 || dia === 6 ? 24 : 23;
 
@@ -108,44 +126,35 @@ export default function Reservar() {
   };
 
 
-  const guardarReserva = () => {
-    if (!user) return;
+  const guardarReserva = async () => {
+    if (!user || enviando) return;
 
     if (!fecha || !hora) {
-      setToast({
-        show: true,
-        text: "Selecciona fecha y hora",
-      });
-
-      setTimeout(() => {
-        setToast({ show: false, text: "" });
-      }, 2500);
+      avisar("error", "Falta información", "Selecciona fecha y hora");
       return;
     }
 
-    const nuevaReserva = {
-      idReserva: Date.now(),
-      usuario: user.nombre,
-      canchaId: id,
-      cancha: cancha.nombre,
-      fecha,
-      hora,
-      duracion: duracionReserva,
-    };
+    setEnviando(true);
+    try {
+      await createReservation({
+        canchaId: Number(id),
+        fecha,
+        horaInicio: hora,
+        horaFin: hourLabel(hourOf(hora) + duracionReserva),
+      });
 
-    localStorage.setItem(
-      "reservas",
-      JSON.stringify([...reservasGuardadas, nuevaReserva])
-    );
-
-    setToast({
-      show: true,
-      text: "Reserva confirmada. Revísala en tu perfil.",
-    });
-
-    setTimeout(() => {
-      navigate("/miperfil");
-    }, 2500);
+      avisar("success", "Reserva exitosa", "Reserva confirmada. Revísala en tu perfil.");
+      // el botón queda bloqueado hasta salir de la página para no reservar dos veces
+      setTimeout(() => navigate("/miperfil"), 2500);
+    } catch (error) {
+      avisar("error", "No se pudo reservar", error.message, 5000);
+      // 409 = alguien más tomó ese horario: se vuelve a cargar lo ocupado
+      if (error.status === 409) {
+        setHora("");
+        disponibilidad.refetch();
+      }
+      setEnviando(false);
+    }
   };
 
   return (
@@ -224,6 +233,15 @@ export default function Reservar() {
               </div>
             </div>
 
+            {disponibilidad.error && (
+              <div role="alert" className="mt-5 p-4 rounded-2xl bg-red-500/20 border border-red-400 text-red-200 text-center">
+                No se pudo cargar la disponibilidad: {disponibilidad.error.message}{" "}
+                <button onClick={disponibilidad.refetch} className="underline font-semibold">
+                  Reintentar
+                </button>
+              </div>
+            )}
+
             {mensajeHorario && (
               <div className="mt-5 p-4 rounded-2xl bg-yellow-500/20 border border-yellow-400 text-yellow-300 text-center">
                 {mensajeHorario}
@@ -265,14 +283,22 @@ export default function Reservar() {
                   Horarios disponibles
                 </h3>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {cargandoDisponibilidad && (
+                  <p className="mb-3 text-sm text-slate-400">Consultando disponibilidad...</p>
+                )}
+
+                <div
+                  className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${
+                    cargandoDisponibilidad ? "opacity-50 pointer-events-none" : ""
+                  }`}
+                >
                   {horariosDisponibles.map((horaNum) => {
                     const h = `${horaNum.toString().padStart(2, "0")}:00`;
 
                     const ocupado = ocupadoPorCruce(horaNum);
                     const cruceReserva = !ocupado && reservaSeCruza(horaNum);
 
-                    const dia = new Date(fecha).getDay();
+                    const dia = dayOfWeek(fecha);
                     const horaCierre = dia === 0 || dia === 6 ? 24 : 23;
 
                     const horaSeleccionada = hora
@@ -292,7 +318,7 @@ export default function Reservar() {
 
 
                         onClick={() => {
-                          const dia = new Date(fecha).getDay();
+                          const dia = dayOfWeek(fecha);
                           const horaCierre = dia === 0 || dia === 6 ? 24 : 23;
 
                           let nuevaHora = horaNum;
@@ -368,9 +394,10 @@ export default function Reservar() {
             {hora && (
               <button
                 onClick={guardarReserva}
-                className="mt-6 w-full bg-green-500 hover:bg-green-600 py-4 rounded-2xl font-bold text-lg transition-all duration-300 hover:scale-[1.02] shadow-lg hover:shadow-green-500/30"
+                disabled={enviando || cargandoDisponibilidad}
+                className="mt-6 w-full bg-green-500 hover:bg-green-600 py-4 rounded-2xl font-bold text-lg transition-all duration-300 hover:scale-[1.02] shadow-lg hover:shadow-green-500/30 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
-                Confirmar reserva
+                {enviando ? "Reservando..." : "Confirmar reserva"}
               </button>
             )}
           </div>
@@ -379,15 +406,28 @@ export default function Reservar() {
         {/* TOAST VISUAL */}
         {toast.show && (
           <div className="fixed top-24 right-6 z-[9999] animate-[fadeIn_.4s_ease]">
-            <div className="bg-slate-900/95 backdrop-blur-xl border border-green-500/40 shadow-2xl rounded-2xl px-6 py-5 flex items-center gap-4 min-w-[340px]">
+            <div
+              role={toast.type === "error" ? "alert" : "status"}
+              className={`bg-slate-900/95 backdrop-blur-xl border shadow-2xl rounded-2xl px-6 py-5 flex items-center gap-4 min-w-[340px] ${
+                toast.type === "error" ? "border-red-500/40" : "border-green-500/40"
+              }`}
+            >
 
-              <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-xl font-bold">
-                ✓
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${
+                  toast.type === "error" ? "bg-red-500" : "bg-green-500"
+                }`}
+              >
+                {toast.type === "error" ? "!" : "✓"}
               </div>
 
               <div>
-                <h4 className="font-bold text-green-400 text-lg">
-                  Reserva exitosa
+                <h4
+                  className={`font-bold text-lg ${
+                    toast.type === "error" ? "text-red-400" : "text-green-400"
+                  }`}
+                >
+                  {toast.title}
                 </h4>
                 <p className="text-slate-300 text-sm">
                   {toast.text}
