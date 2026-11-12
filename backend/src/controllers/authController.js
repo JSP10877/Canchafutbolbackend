@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import User, { EMAIL_RE } from '../models/User.js';
 import { createAccessToken, setAuthCookie, clearAuthCookie } from '../libs/jwt.js';
-
+ 
 const SALT_ROUNDS = 12;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 72; // bcrypt solo procesa los primeros 72 bytes
